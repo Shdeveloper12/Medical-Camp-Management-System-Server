@@ -313,6 +313,31 @@ async function run() {
       }
     });
 
+    // GET /camps/:id - Get a specific camp by ID
+    app.get("/camps/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        console.log('Fetching camp with ID:', id);
+
+        // Validate ObjectId
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).json({ error: "Invalid camp ID format" });
+        }
+
+        const camp = await campCollection.findOne({ _id: new ObjectId(id) });
+        
+        if (!camp) {
+          return res.status(404).json({ error: "Camp not found" });
+        }
+
+        console.log('Camp found:', camp);
+        res.json(camp);
+      } catch (error) {
+        console.error('Error fetching camp details:', error);
+        res.status(500).json({ error: "Failed to fetch camp details" });
+      }
+    });
+
     // POST /camps - Add a new camp (requires authentication)
     app.post("/camps", verifyJWT, async (req, res) => {
       const campData = req.body;
@@ -464,6 +489,117 @@ async function run() {
       } catch (error) {
         console.error('Error deleting camp:', error);
         res.status(500).json({ error: "Failed to delete camp", details: error.message });
+      }
+    });
+
+    // ========== REGISTRATION ROUTES ==========
+
+    // POST /registrations - Register for a camp
+    app.post("/registrations", verifyJWT, async (req, res) => {
+      try {
+        const { campId, name, email, phone, age, gender, emergencyContact, medicalHistory, paymentMethod } = req.body;
+        
+        console.log('Registration request:', req.body);
+        console.log('User from token:', req.decoded);
+
+        // Validate required fields
+        if (!campId || !name || !email || !phone || !age || !gender || !emergencyContact) {
+          return res.status(400).json({ error: "All required fields must be provided" });
+        }
+
+        // Validate camp exists
+        if (!ObjectId.isValid(campId)) {
+          return res.status(400).json({ error: "Invalid camp ID format" });
+        }
+
+        const camp = await campCollection.findOne({ _id: new ObjectId(campId) });
+        if (!camp) {
+          return res.status(404).json({ error: "Camp not found" });
+        }
+
+        // Check if user is already registered for this camp
+        const existingRegistration = await registrationCollection.findOne({
+          campId: new ObjectId(campId),
+          userEmail: req.decoded.email
+        });
+
+        if (existingRegistration) {
+          return res.status(409).json({ error: "You are already registered for this camp" });
+        }
+
+        // Create registration
+        const registrationData = {
+          campId: new ObjectId(campId),
+          campName: camp.campName || camp.name,
+          userEmail: req.decoded.email,
+          userId: req.decoded.userId,
+          name,
+          email,
+          phone,
+          age: parseInt(age),
+          gender,
+          emergencyContact,
+          medicalHistory: medicalHistory || "",
+          paymentMethod,
+          registrationDate: new Date(),
+          status: "confirmed",
+          paymentStatus: paymentMethod === "cash" ? "pending" : "paid"
+        };
+
+        const result = await registrationCollection.insertOne(registrationData);
+        
+        // Update participant count in camp
+        await campCollection.updateOne(
+          { _id: new ObjectId(campId) },
+          { $inc: { participantCount: 1 } }
+        );
+
+        console.log('Registration created:', result);
+
+        res.status(201).json({
+          message: "Registration successful",
+          registrationId: result.insertedId,
+          success: true
+        });
+      } catch (error) {
+        console.error('Error creating registration:', error);
+        res.status(500).json({ error: "Failed to process registration" });
+      }
+    });
+
+    // GET /registrations/participant - Get user's registrations
+    app.get("/registrations/participant", verifyJWT, async (req, res) => {
+      try {
+        const registrations = await registrationCollection
+          .find({ userEmail: req.decoded.email })
+          .toArray();
+        
+        res.json(registrations);
+      } catch (error) {
+        console.error('Error fetching participant registrations:', error);
+        res.status(500).json({ error: "Failed to fetch registrations" });
+      }
+    });
+
+    // GET /registrations/organizer - Get registrations for organizer's camps
+    app.get("/registrations/organizer", verifyJWT, async (req, res) => {
+      try {
+        // Get all camps by this organizer
+        const organizerCamps = await campCollection
+          .find({ organizerEmail: req.decoded.email })
+          .toArray();
+        
+        const campIds = organizerCamps.map(camp => camp._id);
+        
+        // Get all registrations for these camps
+        const registrations = await registrationCollection
+          .find({ campId: { $in: campIds } })
+          .toArray();
+        
+        res.json(registrations);
+      } catch (error) {
+        console.error('Error fetching organizer registrations:', error);
+        res.status(500).json({ error: "Failed to fetch registrations" });
       }
     });
 
