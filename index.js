@@ -642,7 +642,22 @@ async function run() {
 
 
 
-    
+ // GET /registrations/participant - Get user's registrations
+    app.get("/registrations/participant", verifyJWT, async (req, res) => {
+      try {
+        const registrations = await registrationCollection
+          .find({ userEmail: req.decoded.email })
+          .toArray();
+        
+        res.json(registrations);
+      } catch (error) {
+        console.error('Error fetching participant registrations:', error);
+        res.status(500).json({ error: "Failed to fetch registrations" });
+      }
+    });
+
+
+
 
   
 
