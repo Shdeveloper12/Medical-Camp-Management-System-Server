@@ -258,12 +258,9 @@ async function run() {
 
         // Validate required fields
         if (!displayName || displayName.trim().length < 2) {
-          return res
-            .status(400)
-            .json({
-              error:
-                "Display name is required and must be at least 2 characters",
-            });
+          return res.status(400).json({
+            error: "Display name is required and must be at least 2 characters",
+          });
         }
 
         const updateData = {
@@ -505,9 +502,58 @@ async function run() {
       }
     });
 
+    // DELETE /camps/:id - Delete a camp (requires authentication)
+    app.delete("/camps/:id", verifyJWT, async (req, res) => {
+      console.log("DELETE /camps/:id called with ID:", req.params.id);
+      console.log("User from token:", req.decoded);
+
+      try {
+        const campId = req.params.id;
+
+        // Validate ObjectId
+        if (!ObjectId.isValid(campId)) {
+          return res.status(400).json({ error: "Invalid camp ID format" });
+        }
+
+        // Check if camp exists and belongs to organizer
+        const existingCamp = await campCollection.findOne({
+          _id: new ObjectId(campId),
+        });
+        if (!existingCamp) {
+          return res.status(404).json({ error: "Camp not found" });
+        }
+
+        if (existingCamp.organizerEmail !== req.decoded.email) {
+          return res
+            .status(403)
+            .json({ error: "You can only delete your own camps" });
+        }
+
+        const result = await campCollection.deleteOne({
+          _id: new ObjectId(campId),
+        });
+        console.log("Delete result:", result);
+
+        if (result.deletedCount === 0) {
+          return res.status(404).json({ error: "Camp not found" });
+        }
+
+        res.json({
+          message: "Camp deleted successfully",
+          deletedCount: result.deletedCount,
+        });
+      } catch (error) {
+        console.error("Error deleting camp:", error);
+        res
+          .status(500)
+          .json({ error: "Failed to delete camp", details: error.message });
+      }
+    });
 
 
-    
+
+
+  
 
     await client.db("admin").command({ ping: 1 });
     console.log("MongoDB connected successfully!");
