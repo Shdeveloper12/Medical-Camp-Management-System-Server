@@ -701,8 +701,33 @@ async function run() {
     });
 
 
+    // POST /api/confirm-payment - Confirm payment and complete registration
+    app.post("/api/confirm-payment", verifyJWT, async (req, res) => {
+      try {
+        const { 
+          payment_intent_id, 
+          campId, 
+          registrationData 
+        } = req.body;
 
-    
+        // Check user role - only participants can register for camps
+        const user = await userCollection.findOne({ email: req.decoded.email });
+        if (!user) {
+          return res.status(404).json({ error: "User not found" });
+        }
+
+        // Determine user role (same logic as frontend)
+        const userRole = user.role || (user.displayName === "Organizer" ? "organizer" : "participant");
+        
+        if (userRole === "organizer") {
+          return res.status(403).json({ 
+            error: "Organizers cannot register for camps",
+            message: "Only participants are allowed to register for medical camps" 
+          });
+        }
+
+
+
 
 
   
