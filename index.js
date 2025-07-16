@@ -730,6 +730,28 @@ async function run() {
       }
     });
 
+    // GET /registrations/organizer - Get registrations for organizer's camps
+    app.get("/registrations/organizer", verifyJWT, async (req, res) => {
+      try {
+        // Get all camps by this organizer
+        const organizerCamps = await campCollection
+          .find({ organizerEmail: req.decoded.email })
+          .toArray();
+
+        const campIds = organizerCamps.map((camp) => camp._id);
+
+        // Get all registrations for these camps
+        const registrations = await registrationCollection
+          .find({ campId: { $in: campIds } })
+          .toArray();
+
+        res.json(registrations);
+      } catch (error) {
+        console.error("Error fetching organizer registrations:", error);
+        res.status(500).json({ error: "Failed to fetch registrations" });
+      }
+    });
+
     // POST /api/confirm-payment - Confirm payment and complete registration
     app.post("/api/confirm-payment", verifyJWT, async (req, res) => {
       try {
