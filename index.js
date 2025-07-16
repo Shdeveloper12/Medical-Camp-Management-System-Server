@@ -656,7 +656,53 @@ async function run() {
       }
     });
 
+// ========== STRIPE PAYMENT ENDPOINTS ==========
 
+    // POST /api/create-payment-intent - Create payment intent for camp registration
+    app.post("/api/create-payment-intent", verifyJWT, async (req, res) => {
+      try {
+        const { amount, currency = 'usd', campName, registrationData } = req.body;
+
+        // Validate request
+        if (!amount || amount <= 0) {
+          return res.status(400).json({ error: "Valid amount is required" });
+        }
+
+        if (!campName || !registrationData) {
+          return res.status(400).json({ error: "Camp and registration data are required" });
+        }
+
+        // Create payment intent
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: Math.round(amount), // Amount in cents
+          currency: currency,
+          metadata: {
+            campName: campName,
+            participantName: registrationData.name,
+            participantEmail: registrationData.email,
+            organizerEmail: req.decoded.email,
+          },
+        });
+
+        console.log('Payment intent created:', paymentIntent.id);
+
+        res.json({
+          client_secret: paymentIntent.client_secret,
+          payment_intent_id: paymentIntent.id
+        });
+
+      } catch (error) {
+        console.error('Error creating payment intent:', error);
+        res.status(500).json({ 
+          error: "Failed to create payment intent",
+          message: error.message 
+        });
+      }
+    });
+
+
+
+    
 
 
   
