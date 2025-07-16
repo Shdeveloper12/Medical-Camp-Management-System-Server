@@ -550,14 +550,23 @@ async function run() {
       }
     });
 
-
-// POST /registrations - Register for a camp
+    // POST /registrations - Register for a camp
     app.post("/registrations", verifyJWT, async (req, res) => {
       try {
-        const { campId, name, email, phone, age, gender, emergencyContact, medicalHistory, paymentMethod } = req.body;
-        
-        console.log('Registration request:', req.body);
-        console.log('User from token:', req.decoded);
+        const {
+          campId,
+          name,
+          email,
+          phone,
+          age,
+          gender,
+          emergencyContact,
+          medicalHistory,
+          paymentMethod,
+        } = req.body;
+
+        console.log("Registration request:", req.body);
+        console.log("User from token:", req.decoded);
 
         // Check user role - only participants can register for camps
         const user = await userCollection.findOne({ email: req.decoded.email });
@@ -566,18 +575,31 @@ async function run() {
         }
 
         // Determine user role (same logic as frontend)
-        const userRole = user.role || (user.displayName === "Organizer" ? "organizer" : "participant");
-        
+        const userRole =
+          user.role ||
+          (user.displayName === "Organizer" ? "organizer" : "participant");
+
         if (userRole === "organizer") {
-          return res.status(403).json({ 
+          return res.status(403).json({
             error: "Organizers cannot register for camps",
-            message: "Only participants are allowed to register for medical camps" 
+            message:
+              "Only participants are allowed to register for medical camps",
           });
         }
 
         // Validate required fields
-        if (!campId || !name || !email || !phone || !age || !gender || !emergencyContact) {
-          return res.status(400).json({ error: "All required fields must be provided" });
+        if (
+          !campId ||
+          !name ||
+          !email ||
+          !phone ||
+          !age ||
+          !gender ||
+          !emergencyContact
+        ) {
+          return res
+            .status(400)
+            .json({ error: "All required fields must be provided" });
         }
 
         // Validate camp exists
@@ -585,7 +607,9 @@ async function run() {
           return res.status(400).json({ error: "Invalid camp ID format" });
         }
 
-        const camp = await campCollection.findOne({ _id: new ObjectId(campId) });
+        const camp = await campCollection.findOne({
+          _id: new ObjectId(campId),
+        });
         if (!camp) {
           return res.status(404).json({ error: "Camp not found" });
         }
@@ -593,11 +617,13 @@ async function run() {
         // Check if user is already registered for this camp
         const existingRegistration = await registrationCollection.findOne({
           campId: new ObjectId(campId),
-          userEmail: req.decoded.email
+          userEmail: req.decoded.email,
         });
 
         if (existingRegistration) {
-          return res.status(409).json({ error: "You are already registered for this camp" });
+          return res
+            .status(409)
+            .json({ error: "You are already registered for this camp" });
         }
 
         // Create registration
@@ -616,52 +642,55 @@ async function run() {
           paymentMethod,
           registrationDate: new Date(),
           status: "confirmed",
-          paymentStatus: paymentMethod === "cash" ? "pending" : "paid"
+          paymentStatus: paymentMethod === "cash" ? "pending" : "paid",
         };
 
         const result = await registrationCollection.insertOne(registrationData);
-        
+
         // Update participant count in camp
         await campCollection.updateOne(
           { _id: new ObjectId(campId) },
           { $inc: { participantCount: 1 } }
         );
 
-        console.log('Registration created:', result);
+        console.log("Registration created:", result);
 
         res.status(201).json({
           message: "Registration successful",
           registrationId: result.insertedId,
-          success: true
+          success: true,
         });
       } catch (error) {
-        console.error('Error creating registration:', error);
+        console.error("Error creating registration:", error);
         res.status(500).json({ error: "Failed to process registration" });
       }
     });
 
-
-
- // GET /registrations/participant - Get user's registrations
+    // GET /registrations/participant - Get user's registrations
     app.get("/registrations/participant", verifyJWT, async (req, res) => {
       try {
         const registrations = await registrationCollection
           .find({ userEmail: req.decoded.email })
           .toArray();
-        
+
         res.json(registrations);
       } catch (error) {
-        console.error('Error fetching participant registrations:', error);
+        console.error("Error fetching participant registrations:", error);
         res.status(500).json({ error: "Failed to fetch registrations" });
       }
     });
 
-// ========== STRIPE PAYMENT ENDPOINTS ==========
+    // ========== STRIPE PAYMENT ENDPOINTS ==========
 
     // POST /api/create-payment-intent - Create payment intent for camp registration
     app.post("/api/create-payment-intent", verifyJWT, async (req, res) => {
       try {
-        const { amount, currency = 'usd', campName, registrationData } = req.body;
+        const {
+          amount,
+          currency = "usd",
+          campName,
+          registrationData,
+        } = req.body;
 
         // Validate request
         if (!amount || amount <= 0) {
@@ -669,7 +698,9 @@ async function run() {
         }
 
         if (!campName || !registrationData) {
-          return res.status(400).json({ error: "Camp and registration data are required" });
+          return res
+            .status(400)
+            .json({ error: "Camp and registration data are required" });
         }
 
         // Create payment intent
@@ -684,31 +715,25 @@ async function run() {
           },
         });
 
-        console.log('Payment intent created:', paymentIntent.id);
+        console.log("Payment intent created:", paymentIntent.id);
 
         res.json({
           client_secret: paymentIntent.client_secret,
-          payment_intent_id: paymentIntent.id
+          payment_intent_id: paymentIntent.id,
         });
-
       } catch (error) {
-        console.error('Error creating payment intent:', error);
-        res.status(500).json({ 
+        console.error("Error creating payment intent:", error);
+        res.status(500).json({
           error: "Failed to create payment intent",
-          message: error.message 
+          message: error.message,
         });
       }
     });
 
-
     // POST /api/confirm-payment - Confirm payment and complete registration
     app.post("/api/confirm-payment", verifyJWT, async (req, res) => {
       try {
-        const { 
-          payment_intent_id, 
-          campId, 
-          registrationData 
-        } = req.body;
+        const { payment_intent_id, campId, registrationData } = req.body;
 
         // Check user role - only participants can register for camps
         const user = await userCollection.findOne({ email: req.decoded.email });
@@ -717,22 +742,26 @@ async function run() {
         }
 
         // Determine user role (same logic as frontend)
-        const userRole = user.role || (user.displayName === "Organizer" ? "organizer" : "participant");
-        
+        const userRole =
+          user.role ||
+          (user.displayName === "Organizer" ? "organizer" : "participant");
+
         if (userRole === "organizer") {
-          return res.status(403).json({ 
+          return res.status(403).json({
             error: "Organizers cannot register for camps",
-            message: "Only participants are allowed to register for medical camps" 
+            message:
+              "Only participants are allowed to register for medical camps",
           });
         }
 
-
         // Verify payment with Stripe
-        const paymentIntent = await stripe.paymentIntents.retrieve(payment_intent_id);
-        
-        if (paymentIntent.status !== 'succeeded') {
-          return res.status(400).json({ 
-            error: "Payment has not been completed successfully" 
+        const paymentIntent = await stripe.paymentIntents.retrieve(
+          payment_intent_id
+        );
+
+        if (paymentIntent.status !== "succeeded") {
+          return res.status(400).json({
+            error: "Payment has not been completed successfully",
           });
         }
 
@@ -741,7 +770,9 @@ async function run() {
           return res.status(400).json({ error: "Invalid camp ID format" });
         }
 
-        const camp = await campCollection.findOne({ _id: new ObjectId(campId) });
+        const camp = await campCollection.findOne({
+          _id: new ObjectId(campId),
+        });
         if (!camp) {
           return res.status(404).json({ error: "Camp not found" });
         }
@@ -749,11 +780,13 @@ async function run() {
         // Check for duplicate registration
         const existingRegistration = await registrationCollection.findOne({
           campId: new ObjectId(campId),
-          userEmail: req.decoded.email
+          userEmail: req.decoded.email,
         });
 
         if (existingRegistration) {
-          return res.status(409).json({ error: "You are already registered for this camp" });
+          return res
+            .status(409)
+            .json({ error: "You are already registered for this camp" });
         }
 
         // Create registration with payment info
@@ -769,7 +802,7 @@ async function run() {
           gender: registrationData.gender,
           emergencyContact: registrationData.emergencyContact,
           medicalHistory: registrationData.medicalHistory || "",
-          paymentMethod: 'card',
+          paymentMethod: "card",
           registrationDate: new Date(),
           status: "confirmed",
           paymentStatus: "paid",
@@ -778,36 +811,40 @@ async function run() {
         };
 
         const result = await registrationCollection.insertOne(registrationDoc);
-        
+
         // Update participant count
         await campCollection.updateOne(
           { _id: new ObjectId(campId) },
           { $inc: { participantCount: 1 } }
         );
 
-        console.log('Registration completed with payment:', result.insertedId);
+        console.log("Registration completed with payment:", result.insertedId);
 
         res.status(201).json({
           success: true,
           message: "Registration and payment completed successfully",
           registrationId: result.insertedId,
-          paymentIntentId: payment_intent_id
+          paymentIntentId: payment_intent_id,
         });
-
       } catch (error) {
-        console.error('Error confirming payment:', error);
-        res.status(500).json({ 
+        console.error("Error confirming payment:", error);
+        res.status(500).json({
           error: "Failed to confirm payment and registration",
-          message: error.message 
+          message: error.message,
         });
       }
     });
 
-
-
-
-
-  
+    // GET /api/payment-methods - Get user's saved payment methods (optional)
+    app.get("/api/payment-methods", verifyJWT, async (req, res) => {
+      try {
+        // This is optional - you can implement if you want to save customer payment methods
+        res.json({ payment_methods: [] });
+      } catch (error) {
+        console.error("Error fetching payment methods:", error);
+        res.status(500).json({ error: "Failed to fetch payment methods" });
+      }
+    });
 
     await client.db("admin").command({ ping: 1 });
     console.log("MongoDB connected successfully!");
