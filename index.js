@@ -6,6 +6,7 @@ const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
 const bcrypt = require("bcryptjs");
 const dotenv = require("dotenv");
+
 dotenv.config();
 const port = process.env.PORT || 5000;
 
@@ -868,6 +869,10 @@ async function run() {
       }
     });
 
+    app.get("/", (req, res) => {
+      res.send("MCMS Server is Running");
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log("MongoDB connected successfully!");
   } catch (err) {
@@ -876,7 +881,7 @@ async function run() {
 }
 
 run().catch(console.dir);
-
+module.exports = app;
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
