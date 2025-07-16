@@ -727,6 +727,83 @@ async function run() {
         }
 
 
+        // Verify payment with Stripe
+        const paymentIntent = await stripe.paymentIntents.retrieve(payment_intent_id);
+        
+        if (paymentIntent.status !== 'succeeded') {
+          return res.status(400).json({ 
+            error: "Payment has not been completed successfully" 
+          });
+        }
+
+        // Validate camp exists
+        if (!ObjectId.isValid(campId)) {
+          return res.status(400).json({ error: "Invalid camp ID format" });
+        }
+
+        const camp = await campCollection.findOne({ _id: new ObjectId(campId) });
+        if (!camp) {
+          return res.status(404).json({ error: "Camp not found" });
+        }
+
+        // Check for duplicate registration
+        const existingRegistration = await registrationCollection.findOne({
+          campId: new ObjectId(campId),
+          userEmail: req.decoded.email
+        });
+
+        if (existingRegistration) {
+          return res.status(409).json({ error: "You are already registered for this camp" });
+        }
+
+        // Create registration with payment info
+        const registrationDoc = {
+          campId: new ObjectId(campId),
+          campName: camp.campName || camp.name,
+          userEmail: req.decoded.email,
+          userId: req.decoded.userId,
+          name: registrationData.name,
+          email: registrationData.email,
+          phone: registrationData.phone,
+          age: parseInt(registrationData.age),
+          gender: registrationData.gender,
+          emergencyContact: registrationData.emergencyContact,
+          medicalHistory: registrationData.medicalHistory || "",
+          paymentMethod: 'card',
+          registrationDate: new Date(),
+          status: "confirmed",
+          paymentStatus: "paid",
+          paymentIntentId: payment_intent_id,
+          amountPaid: paymentIntent.amount / 100, // Convert back to dollars
+        };
+
+        const result = await registrationCollection.insertOne(registrationDoc);
+        
+        // Update participant count
+        await campCollection.updateOne(
+          { _id: new ObjectId(campId) },
+          { $inc: { participantCount: 1 } }
+        );
+
+        console.log('Registration completed with payment:', result.insertedId);
+
+        res.status(201).json({
+          success: true,
+          message: "Registration and payment completed successfully",
+          registrationId: result.insertedId,
+          paymentIntentId: payment_intent_id
+        });
+
+      } catch (error) {
+        console.error('Error confirming payment:', error);
+        res.status(500).json({ 
+          error: "Failed to confirm payment and registration",
+          message: error.message 
+        });
+      }
+    });
+
+
 
 
 
