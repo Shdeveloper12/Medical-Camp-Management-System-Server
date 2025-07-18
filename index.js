@@ -1,12 +1,13 @@
 // MCMS Server - index.js
 const express = require("express");
 const cors = require("cors");
+
 const app = express();
 const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
 const bcrypt = require("bcryptjs");
 const dotenv = require("dotenv");
-
+// Import the camps route
 dotenv.config();
 const port = process.env.PORT || 5000;
 
@@ -16,11 +17,17 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 // Middleware
-app.use(cors());
+
+app.use(
+  cors({
+    origin: ["http://localhost:5173", "https://mcms2.netlify.app"],
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(cookieParser());
 
-// Debug middleware to log all requests
+
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.path} - ${new Date().toISOString()}`);
   console.log("Request body:", req.body);
@@ -61,7 +68,7 @@ const verifyJWT = (req, res, next) => {
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
 
     // Database Collections
     const userCollection = client.db("MCMS").collection("users");
@@ -183,18 +190,6 @@ async function run() {
       } catch (error) {
         res.status(500).json({ error: "Internal server error" });
       }
-    });
-
-    // GET /verify-token
-    app.get("/verify-token", verifyJWT, (req, res) => {
-      res.json({
-        valid: true,
-        user: {
-          email: req.decoded.email,
-          userId: req.decoded.userId,
-          role: req.decoded.role,
-        },
-      });
     });
 
     // GET /users/:email
@@ -330,7 +325,7 @@ async function run() {
         res.json(camps);
       } catch (error) {
         console.error("Error fetching camps:", error);
-        res.status(500).json({ error: "Failed to fetch camps" });
+        res.status(500).json({ error: "Failed fetch camps" });
       }
     });
 
@@ -359,7 +354,7 @@ async function run() {
       }
     });
 
-    // POST /camps - Add a new camp (requires authentication)
+    // POST /camps - Add a new camp 
     app.post("/camps", verifyJWT, async (req, res) => {
       const campData = req.body;
       console.log("Incoming campData:", campData);
@@ -397,7 +392,7 @@ async function run() {
 
     // ========== REGISTRATION ROUTES ==========
 
-    // PUT /camps/:id - Update a camp (requires authentication)
+    // PUT /camps/:id - Update a camp 
     app.put("/camps/:id", verifyJWT, async (req, res) => {
       console.log("PUT /camps/:id called with ID:", req.params.id);
       console.log("Request body:", req.body);
@@ -503,7 +498,7 @@ async function run() {
       }
     });
 
-    // DELETE /camps/:id - Delete a camp (requires authentication)
+    // DELETE /camps/:id - Delete a camp
     app.delete("/camps/:id", verifyJWT, async (req, res) => {
       console.log("DELETE /camps/:id called with ID:", req.params.id);
       console.log("User from token:", req.decoded);
@@ -511,7 +506,7 @@ async function run() {
       try {
         const campId = req.params.id;
 
-        // Validate ObjectId
+       
         if (!ObjectId.isValid(campId)) {
           return res.status(400).json({ error: "Invalid camp ID format" });
         }
@@ -575,7 +570,7 @@ async function run() {
           return res.status(404).json({ error: "User not found" });
         }
 
-        // Determine user role (same logic as frontend)
+        // Determine user role)
         const userRole =
           user.role ||
           (user.displayName === "Organizer" ? "organizer" : "participant");
@@ -588,7 +583,7 @@ async function run() {
           });
         }
 
-        // Validate required fields
+      
         if (
           !campId ||
           !name ||
@@ -681,6 +676,32 @@ async function run() {
       }
     });
 
+    // GET /api/registrations/check/:campId - Check if user is already registered for a camp
+    app.get("/api/registrations/check/:campId", verifyJWT, async (req, res) => {
+      try {
+        const { campId } = req.params;
+        const userEmail = req.decoded.email;
+
+        console.log(
+          `Checking registration for user ${userEmail} and camp ${campId}`
+        );
+
+        // Check if user is already registered for this camp
+        const existingRegistration = await registrationCollection.findOne({
+          campId: new ObjectId(campId),
+          participantEmail: userEmail,
+        });
+
+        res.json({
+          isRegistered: !!existingRegistration,
+          registrationId: existingRegistration?._id,
+        });
+      } catch (error) {
+        console.error("Error checking registration:", error);
+        res.status(500).json({ error: "Failed to check registration status" });
+      }
+    });
+
     // ========== STRIPE PAYMENT ENDPOINTS ==========
 
     // POST /api/create-payment-intent - Create payment intent for camp registration
@@ -706,7 +727,7 @@ async function run() {
 
         // Create payment intent
         const paymentIntent = await stripe.paymentIntents.create({
-          amount: Math.round(amount), // Amount in cents
+          amount: Math.round(amount), 
           currency: currency,
           metadata: {
             campName: campName,
@@ -830,7 +851,7 @@ async function run() {
           status: "confirmed",
           paymentStatus: "paid",
           paymentIntentId: payment_intent_id,
-          amountPaid: paymentIntent.amount / 100, // Convert back to dollars
+          amountPaid: paymentIntent.amount / 100,
         };
 
         const result = await registrationCollection.insertOne(registrationDoc);
@@ -861,16 +882,11 @@ async function run() {
     // GET /api/payment-methods - Get user's saved payment methods (optional)
     app.get("/api/payment-methods", verifyJWT, async (req, res) => {
       try {
-        // This is optional - you can implement if you want to save customer payment methods
         res.json({ payment_methods: [] });
       } catch (error) {
         console.error("Error fetching payment methods:", error);
         res.status(500).json({ error: "Failed to fetch payment methods" });
       }
-    });
-
-    app.get("/", (req, res) => {
-      res.send("MCMS Server is Running");
     });
 
     await client.db("admin").command({ ping: 1 });
@@ -881,7 +897,10 @@ async function run() {
 }
 
 run().catch(console.dir);
-module.exports = app;
+
+app.get("/", (req, res) => {
+  res.send("MCMS Server is Running");
+});
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
